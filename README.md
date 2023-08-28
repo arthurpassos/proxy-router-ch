@@ -1,0 +1,1 @@
+Docker compose to reproduce an environment where internet is accessible only via border router. Border router restricts http/https connections to requests originated from squid_proxy server only. CH points to border router as gateway and to proxy server as proxy.

@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+
+  squid_proxy:
+    image: sameersbn/squid:3.3.8-23
+    container_name: squid_proxy
+    privileged: true
+    volumes:
+      - /home/arthur/proxy_test/squid.conf:/etc/squid/squid.conf
+    command: /bin/sh -c "route delete default gw 172.18.0.1 && route add default gw border_router eth0 && /sbin/entrypoint.sh"
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - ch_network
+
+  border_router:
+    image: ubuntu:20.04
+    container_name: border_router
+    privileged: true
+    command: /bin/sh -c "apt-get update && apt-get install -y iptables && iptables -A FORWARD -o eth0 -s squid_proxy -p tcp --dport 80 -j ACCEPT && iptables -A FORWARD -o eth0 -s squid_proxy -p tcp --dport 443 -j ACCEPT && iptables -t nat -A POSTROUTING -o eth0 -s squid_proxy -p tcp --dport 80 -j MASQUERADE && iptables -t nat -A POSTROUTING -o eth0 -s squid_proxy -p tcp --dport 443 -j MASQUERADE && iptables -A FORWARD -o eth0 -p tcp --dport 80 -j DROP && iptables -A FORWARD -o eth0 -p tcp --dport 443 -j DROP && iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE && tail -f /dev/null"
+    networks:
+      - ch_network
+
+  clickhouse_server:
+    image: clickhouse/clickhouse-server:head
+    container_name: clickhouse_server
+    environment:
+      - http_proxy=http://squid_proxy:3128
+      - https_proxy=http://squid_proxy:3128
+    command: /bin/sh -c "sleep 30 && apt-get update && apt-get install -y net-tools dnsutils curl iputils-ping traceroute && route add default gw border_router eth0 && route delete default gw 172.18.0.1 && /entrypoint.sh"
+    cap_add:
+    - NET_ADMIN
+    volumes:
+      - /home/arthur/proxy_test/config.xml:/etc/clickhouse-server/config.xml
+    networks:
+      - ch_network
+    depends_on:
+      - squid_proxy
+      - border_router
+
+networks:
+  ch_network:
+    driver: bridge
+
